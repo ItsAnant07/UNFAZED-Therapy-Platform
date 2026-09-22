@@ -1,3 +1,13 @@
+const nodemailer = require("nodemailer");
+
+function formatDate(value) {
+  return new Date(value).toLocaleDateString("en-IN", {
+    day: "numeric",
+    month: "long",
+    year: "numeric"
+  });
+}
+
 function getTransporter() {
   console.log("SMTP CHECK:", {
     host: !!process.env.SMTP_HOST,
