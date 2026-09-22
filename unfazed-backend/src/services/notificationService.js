@@ -1,19 +1,24 @@
-const nodemailer = require("nodemailer");
-
 function getTransporter() {
-  if (!process.env.SMTP_HOST || !process.env.SMTP_USER || !process.env.SMTP_PASS) return null;
+  console.log("SMTP CHECK:", {
+    host: !!process.env.SMTP_HOST,
+    user: !!process.env.SMTP_USER,
+    pass: !!process.env.SMTP_PASS,
+    port: process.env.SMTP_PORT,
+    secure: process.env.SMTP_SECURE
+  });
+
+  if (!process.env.SMTP_HOST || !process.env.SMTP_USER || !process.env.SMTP_PASS) {
+    return null;
+  }
+
   return nodemailer.createTransport({
     host: process.env.SMTP_HOST,
     port: Number(process.env.SMTP_PORT || 587),
     secure: String(process.env.SMTP_SECURE || "false") === "true",
-    auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS }
-  });
-}
-
-function formatDate(value) {
-  return new Date(value).toLocaleString("en-IN", {
-    weekday: "long", day: "numeric", month: "long", year: "numeric",
-    hour: "numeric", minute: "2-digit"
+    auth: {
+      user: process.env.SMTP_USER,
+      pass: process.env.SMTP_PASS
+    }
   });
 }
 

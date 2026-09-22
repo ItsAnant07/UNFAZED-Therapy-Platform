@@ -22,17 +22,36 @@ const therapistImages={
 
 function useTherapists(){
   const [data,setData]=useState(therapists);
+
   useEffect(()=>{
-    api.get('/therapist/public-list').then(r=>{
-      const list=(r.data.therapists||[]).filter(t=>t.slug!=='dr-sharma');
-      if(list.length){
-        setData(list.map(t=>{
-          const fallback=therapists.find(x=>x.id===t.slug)||{};
-          return {id:t.slug,name:t.name,role:fallback.role||'Therapist',exp:fallback.exp||'Experienced practitioner',tags:t.specializations?.length?t.specializations:fallback.tags||[],languages:(t.languages||fallback.languages||['English']).join(' · '),price:fallback.price||'₹1,500',img:therapistImages[t.slug]||fallback.img};
-        }));
-      }
-    }).catch(()=>{});
+    api.get('/therapist/public-list')
+      .then(r=>{
+        const list=r.data.therapists || [];
+
+        if(list.length){
+          setData(list.map(t=>{
+            const fallback=therapists.find(x=>x.id===t.slug) || {};
+
+            return {
+              id:t.slug,
+              name:t.name,
+              role:fallback.role || 'Therapist',
+              exp:fallback.exp || 'Experienced practitioner',
+              tags:t.specializations?.length
+                ? t.specializations
+                : (fallback.tags || []),
+              languages:(t.languages || fallback.languages || ['English']).join(' · '),
+              price:fallback.price || '₹1,500',
+              img:therapistImages[t.slug] || fallback.img
+            };
+          }));
+        }
+      })
+      .catch(err=>{
+        console.error('Could not load therapists:',err);
+      });
   },[]);
+
   return data;
 }
 
@@ -98,9 +117,154 @@ function Dashboard(){
  return <div className="dash"><aside className="dash-side"><Link to="/" className="brand"><span className="brand-mark">u</span><span>unfazed</span></Link><div className="dash-user"><div className="avatar">{(profile?.name||'A')[0]}</div><div><b>{profile?.name||'My space'}</b><span>Therapist dashboard</span></div></div><nav><NavLink to="/dashboard">Overview</NavLink><NavLink to="/therapists">Find a therapist</NavLink><NavLink to="/resources">Resources</NavLink></nav><button className="logout" onClick={logout}>Log out</button></aside><main className="dash-main"><div className="dash-top"><div><span className="eyebrow">Therapist space</span><h1>Practice overview</h1></div><Link className="btn btn-dark" to="/therapists">View public profile <Icon name="arrow" size={16}/></Link></div><section className="dash-card therapist-booking-card"><div className="dash-label">Create a booking</div><h3>Book a client manually</h3><p className="small-muted">Use this when you arrange a session for a client from your therapist dashboard. The client receives the booking reference and can view it in My bookings.</p><form className="therapist-booking-form" onSubmit={createTherapistBooking}><select className="settings-input" value={bookingForm.clientId} onChange={e=>setBookingForm({...bookingForm,clientId:e.target.value})} required><option value="">Select client</option>{clients.map(c=><option value={c._id} key={c._id}>{c.name} · {c.email}</option>)}</select><input className="settings-input" type="datetime-local" value={bookingForm.start} onChange={e=>setBookingForm({...bookingForm,start:e.target.value})} required/><input className="settings-input" type="number" min="0" value={bookingForm.amount} onChange={e=>setBookingForm({...bookingForm,amount:e.target.value})} placeholder="Session fee (₹)"/><button className="btn btn-dark full" disabled={bookingSaving}>{bookingSaving?'Creating…':'Book client & send confirmation'}</button></form></section><div className="dash-grid"><section className="next-session"><div className="dash-label">Sessions</div>{sessions.length?<div className="session-list">{sessions.map((session)=><div className="session-row" key={session._id}><div className="session-date"><b>{new Date(session.start).toLocaleDateString()}</b><span>{new Date(session.start).toLocaleTimeString([], {hour:'numeric',minute:'2-digit'})}</span></div><div><b>{session.client?.name||'Client'}</b><p>{session.client?.email||''} · Online</p></div><div className="session-actions"><span className={'session-status '+(session.status==='Cancelled'?'cancelled':'')}>{session.status}</span>{session.status==='Booked'&&<button className="mini-btn danger" onClick={()=>cancel(session._id)}>Cancel</button>}</div></div>)}</div>:<><h2>No sessions yet.</h2><p>New public bookings will appear here automatically.</p></>}</section><section className="dash-card"><div className="dash-label">Payment verification</div><h3>UPI payments</h3>{payments.length?<div className="payment-list">{payments.slice(0,8).map(p=><div className="payment-row" key={p._id}><div><b>₹{Number(p.amount||0).toLocaleString('en-IN')}</b><span>{p.client?.name||'Client'} · {p.utr||'No UTR'}{p.refund_status==='pending'?' · Refund pending':''}</span></div><div className="session-actions"><span className="session-status">{p.status}</span>{p.status==='pending'&&<><button className="mini-btn" onClick={async()=>{await verifyPayment(p._id,'paid');setPayments(x=>x.map(i=>i._id===p._id?{...i,status:'paid'}:i))}}>Verify</button><button className="mini-btn danger" onClick={async()=>{await verifyPayment(p._id,'rejected');setPayments(x=>x.map(i=>i._id===p._id?{...i,status:'rejected'}:i))}}>Reject</button></>}{p.refund_status==='pending'&&<><input className="mini-input" value={refundRef[p._id]||''} onChange={e=>setRefundRef({...refundRef,[p._id]:e.target.value})} placeholder="Refund UTR"/><button className="mini-btn" onClick={()=>processRefund(p._id)}>Mark refunded</button></>}</div></div>)}</div>:<p className="small-muted">No UPI payments submitted yet.</p>}</section><section className="dash-card"><div className="dash-label">Your UPI</div><h3>Receive direct payments</h3><p className="small-muted">Set the UPI ID patients should pay. This is a real UPI payment flow, not a fake gateway.</p><input className="settings-input" value={upiId} onChange={e=>setUpiId(e.target.value)} placeholder="yourname@upi"/><button className="btn btn-dark full" disabled={saving} onClick={saveProfile}>{saving?'Saving…':'Save UPI ID'}</button></section></div><section className="dash-bottom"><div><span className="eyebrow">Payment workflow</span><h2>Patients pay you directly by UPI.</h2><p className="small-muted">They scan your QR, pay in their UPI app, enter the UTR, and you verify the payment here.</p></div><div className="privacy-card"><b>Important</b><p>Only mark a payment as paid after checking the amount and UTR in your UPI app/bank statement.</p></div></section></main></div>
 }
 function Profile(){
- const existing=JSON.parse(localStorage.getItem('unfazed_profile')||'{}');const [form,setForm]=useState({name:existing.name||'',email:existing.email||'',phone:existing.phone||''});const nav=useNavigate();
- const save=e=>{e.preventDefault();localStorage.setItem('unfazed_profile',JSON.stringify(form));nav('/my-bookings')};
- return <Layout><section className="page-hero centered"><span className="eyebrow">Your profile</span><h1>A space that keeps your <em>details handy.</em></h1><p>Your profile is used to pre-fill future bookings and connect your bookings to you.</p></section><section className="profile-form-card"><form onSubmit={save}><label>Full name<input required value={form.name} onChange={e=>setForm({...form,name:e.target.value})}/></label><label>Email<input required type="email" value={form.email} onChange={e=>setForm({...form,email:e.target.value})}/></label><label>Phone<input value={form.phone} onChange={e=>setForm({...form,phone:e.target.value})}/></label><button className="btn btn-dark full">Save profile <Icon name="arrow" size={16}/></button></form></section></Layout>
+  const existing = JSON.parse(
+    localStorage.getItem('unfazed_profile') || '{}'
+  );
+
+  const [form,setForm] = useState({
+    name: existing.name || '',
+    email: existing.email || '',
+    phone: existing.phone || '',
+    upiId: existing.upiId || ''
+  });
+
+  const [saving,setSaving] = useState(false);
+  const [message,setMessage] = useState('');
+  const [error,setError] = useState('');
+  const nav = useNavigate();
+
+  useEffect(()=>{
+    api.get('/therapist/me')
+      .then(r=>{
+        const t = r.data.therapist || r.data;
+
+        setForm(prev=>({
+          ...prev,
+          name: t.name || prev.name,
+          upiId: t.upiId || ''
+        }));
+      })
+      .catch(()=>{});
+  },[]);
+
+  const save = async e => {
+    e.preventDefault();
+    setSaving(true);
+    setMessage('');
+    setError('');
+
+    try {
+      await api.put('/therapist/me',{
+        name: form.name,
+        upiId: form.upiId
+      });
+
+      localStorage.setItem(
+        'unfazed_profile',
+        JSON.stringify(form)
+      );
+
+      setMessage('Profile and UPI ID saved successfully.');
+    } catch(e) {
+      setError(
+        e.response?.data?.message ||
+        'Could not save profile.'
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return <Layout>
+    <section className="page-hero centered">
+      <span className="eyebrow">Your profile</span>
+
+      <h1>
+        A space that keeps your <em>details handy.</em>
+      </h1>
+
+      <p>
+        Your profile is used to pre-fill future bookings
+        and manage your therapist payment details.
+      </p>
+    </section>
+
+    <section className="profile-form-card">
+      <form onSubmit={save}>
+
+        <label>
+          Full name
+          <input
+            required
+            value={form.name}
+            onChange={e=>
+              setForm({...form,name:e.target.value})
+            }
+          />
+        </label>
+
+        <label>
+          Email
+          <input
+            required
+            type="email"
+            value={form.email}
+            onChange={e=>
+              setForm({...form,email:e.target.value})
+            }
+          />
+        </label>
+
+        <label>
+          Phone
+          <input
+            value={form.phone}
+            onChange={e=>
+              setForm({...form,phone:e.target.value})
+            }
+          />
+        </label>
+
+        <label>
+          UPI ID
+          <input
+            value={form.upiId}
+            onChange={e=>
+              setForm({...form,upiId:e.target.value})
+            }
+            placeholder="example@upi"
+          />
+        </label>
+
+        <small className="fine">
+          This UPI ID is used to generate the payment QR
+          for your therapy sessions.
+        </small>
+
+        {error &&
+          <div className="form-error">
+            {error}
+          </div>
+        }
+
+        {message &&
+          <div className="success-message">
+            ✓ {message}
+          </div>
+        }
+
+        <button
+          type="submit"
+          className="btn btn-dark full"
+          disabled={saving}
+        >
+          {saving ? 'Saving…' : 'Save profile'}
+          <Icon name="arrow" size={16}/>
+        </button>
+
+      </form>
+    </section>
+  </Layout>
 }
 
 function MyBookings(){
